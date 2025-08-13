@@ -1,229 +1,165 @@
-import { Injectable } from '@nestjs/common';
+
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-
-
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { v4 as uuidv4 } from 'uuid'; 
 
 @Injectable()
 export class FlightsService {
-  constructor(private readonly http: HttpService) { }
+    constructor(
+        private readonly http: HttpService,
+        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    ) { }
 
-  async searchFlights(payload: any): Promise<any[]> {
-    let req = {
-      AdultCount: Number(payload.AdultCount),
-      ChildCount: Number(payload.ChildCount),
-      InfantCount: Number(payload.InfantCount),
-      JourneyType: payload.JourneyType,
-      PreferredAirlines: payload.PreferredAirlines?.length ? payload.PreferredAirlines : [],
+    private formatAsJourneyList(raw: any) {
+        const journeys: any[] = raw?.Search?.FlightDataList?.JourneyList || [];
+        
+        const formattedJourneys = journeys.map((journey) =>
+            
+            journey.map((flight) => {
+                const priceBreakup = flight?.Price?.PriceBreakup ?? {};
+                const passengerBreakup = flight?.Price?.PassengerBreakup ?? {};
+                const attributes = flight?.Attr ?? {};
 
-      CabinClass: payload.CabinClass,
-      Segments: [
-        {
-          Origin: payload.Segments?.[0]?.Origin,
-          Destination: payload.Segments?.[0]?.Destination,
-          DepartureDate: payload.Segments?.[0]?.DepartureDate,
-        },
-      ],
-    };
+                return {
+                    FlightDetails: {
+                       
+                        Details: (flight?.FlightDetails?.Details ?? []).map((FlightStops: any[]) =>
+                            FlightStops.map((segment: any) => ({
+                                Origin: {
+                                    AirportCode: segment.Origin?.AirportCode ?? null,
+                                    CityName: segment.Origin?.CityName ?? null,
+                                    AirportName: segment.Origin?.AirportName ?? null,
+                                    DateTime: segment.Origin?.DateTime ?? null,
+                                    Terminal: segment.Origin?.Terminal ?? null,
+                                },
+                                Destination: {
+                                    AirportCode: segment.Destination?.AirportCode ?? null,
+                                    CityName: segment.Destination?.CityName ?? null,
+                                    AirportName: segment.Destination?.AirportName ?? null,
+                                    DateTime: segment.Destination?.DateTime ?? null,
+                                    Terminal: segment.Destination?.Terminal ?? null,
+                                },
+                                OperatorCode: segment.OperatorCode ?? null,
+                                OperatorName: segment.OperatorName ?? null,
+                                FlightNumber: segment.FlightNumber ?? null,
+                                Duration: segment.Duration ?? null,
+                                CabinClass: segment.CabinClass ?? null,
+                                Attr: {
+                                    Baggage: segment.Attr?.Baggage ?? null,
+                                    CabinBaggage: segment.Attr?.CabinBaggage ?? null,
+                                    AvailableSeats: segment.Attr?.AvailableSeats ?? null,
+                                },
+                                stop_over: segment.stop_over ?? null
+                            }))
+                        ),
+                    },
+                    Price: {
+                        Currency: flight.Price?.Currency ?? null,
+                        TotalDisplayFare: flight.Price?.TotalDisplayFare ?? null,
+                        PriceBreakup: {
+                            BasicFare: priceBreakup.BasicFare ?? null,
+                            Tax: priceBreakup.Tax ?? null,
+                            AgentCommission: priceBreakup.AgentCommission ?? null,
+                        },
+                        PassengerBreakup: {
+                            ADT: {
+                                BasePrice: passengerBreakup.ADT?.BasePrice ?? null,
+                                Tax: passengerBreakup.ADT?.Tax ?? null,
+                                TotalPrice: passengerBreakup.ADT?.TotalPrice ?? null,
+                                PassengerCount: passengerBreakup.ADT?.PassengerCount ?? null,
+                            },
+                        },
+                    },
+                   
+                    Attr: {
+                        IsRefundable: attributes.IsRefundable ?? null,
+                        AirlineRemark: attributes.AirlineRemark ?? null,
+                        FareType: attributes.FareType ?? null,
+                        IsLCC: attributes.IsLCC ?? null,
+                        ExtraBaggage: attributes.ExtraBaggage ?? null,
+                        conditions: {
+                            IsPassportRequiredAtBook: attributes.conditions?.IsPassportRequiredAtBook ?? null,
+                            IsPanRequiredAtBook: attributes.conditions?.IsPanRequiredAtBook ?? null,
+                        },
+                    },
+                    apiResultToken : flight?.ResultToken ?? null
+                };
+            }),
+        );
 
-    const response = await firstValueFrom(
-      this.http.post(
-        'http://test.services.travelomatix.com/webservices/index.php/flight/service/Search',
-        req,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-Username': 'test245274',
-            'x-DomainKey': 'TMX3372451534825527',
-            'x-Password': 'test@245',
-            'x-system': 'test'
-
-          },
-        }
-      )
-    );
-
-    return response.data
-  }
-
-
-
-  async fetchFareRules(payload: { ResultToken: string }): Promise<any[]> {
-    const req = {
-      ResultToken: payload.ResultToken
-    };
-
-    const response = await firstValueFrom(
-      this.http.post(
-        'http://test.services.travelomatix.com/webservices/index.php/flight/service/FareRule',
-        req,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-Username': 'test245274',
-            'x-DomainKey': 'TMX3372451534825527',
-            'x-Password': 'test@245',
-            'x-system': 'test'
-          },
-        }
-      )
-    );
-
-    return response.data;
-  }
-
-
-  async FetchFareQuote(payload: any): Promise<any[]> {
-
-    const req = {
-      ResultToken: payload.ResultToken
-    };
-
-    const response = await firstValueFrom(
-
-      this.http.post('http://test.services.travelomatix.com/webservices/index.php/flight/service/UpdateFareQuote',
-        req, {
-
-        headers: {
-          'Content-Type': 'application/json',
-          'x-Username': 'test245274',
-          'x-DomainKey': 'TMX3372451534825527',
-          'x-Password': 'test@245',
-          'x-system': 'test'
-        }
-      }
-
-
-      )
-
-
-    )
-
-    return response.data
-
-  }
-
-
-  async UpdatedFareQuoteRound(payload: { ResultToken: string }) {
-
-    const req = {
-      ResultToken: payload.ResultToken
-
+        return {
+            Status: raw?.Status ?? null,
+            Message: raw?.Message ?? '',
+            Search: {
+                FlightDataList: {
+                    JourneyList: formattedJourneys,
+                },
+            },
+        };
     }
 
-    const response = await firstValueFrom(
+    async searchFlights(payload: any) {
+       
+        // const reqBody = {
+        //     AdultCount: Number(payload.AdultCount),
+        //     ChildCount: Number(payload.ChildCount),
+        //     InfantCount: Number(payload.InfantCount),
+        //     JourneyType: payload.JourneyType,
+        //     PreferredAirlines: payload.PreferredAirlines?.length ? payload.PreferredAirlines : [],
+        //     CabinClass: payload.CabinClass,
+        //     Segments: [
+        //         {
+        //             Origin: payload.Segments?.[0]?.Origin,
+        //             Destination: payload.Segments?.[0]?.Destination,
+        //             DepartureDate: payload.Segments?.[0]?.DepartureDate,
+        //         },
+        //     ],
+        // };
 
-      this.http.post(
+        const apiResp = await firstValueFrom(
+            this.http.post(
+                'http://test.services.travelomatix.com/webservices/index.php/flight/service/Search',
+                payload,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-Username': 'test245274',
+                        'x-Password': 'test@245',
+                        'x-DomainKey': 'TMX3372451534825527',
+                        'x-System': 'test',
+                    },
+                },
+            ),
+        );
 
-        'http://test.services.travelomatix.com/webservices/index.php/flight/service/UpdateFareQuote',
-        req,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-Username': 'test245274',
-            'x-DomainKey': 'TMX3372451534825527',
-            'x-Password': 'test@245',
-            'x-system': 'test'
-          }
+        const rawData = apiResp?.data ?? {};
+        const formatted = this.formatAsJourneyList(rawData);
+
+        const journeyList = formatted.Search.FlightDataList.JourneyList.flat();
+        const ttl = 3600; 
+
+        for (const flight of journeyList) {
+            const token = flight.apiResultToken;  
+            if (token) {
+                await this.cacheManager.set(token, flight, ttl);
+            }
         }
-      )
-
-    )
-
-    return response.data
-
-  }
-
-
-  async ExtraService(payload: { ResultToken: string }) {
-
-    const req = {
-
-      ResultToken: payload.ResultToken
+        return formatted;
     }
 
+    async getByToken(token: string) {
+        const cleanToken = token.trim();
+        console.log('Looking up token:', cleanToken);
 
-    const response = await firstValueFrom(
+        const result = await this.cacheManager.get(cleanToken);
+        console.log('Cache result:', result);
 
-      this.http.post(
-
-        'http://test.services.travelomatix.com/webservices/index.php/flight/service/ExtraServices',
-        req,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-Username': 'test245274',
-            'x-DomainKey': 'TMX3372451534825527',
-            'x-Password': 'test@245',
-            'x-system': 'test'
-
-          }
+        if (!result) {
+            throw new NotFoundException('Result not found for this token');
         }
-      )
-
-    )
-
-    return response.data
-  }
-
-//http://54.198.46.240:6017/webservice/flight/commitBooking
-
-  async CommitBooking(payload:any){
-
-    const req = {
-      AppReference: payload.AppReference,
-      SequenceNumber: payload.SequenceNumber,
-      ResultToken: payload.ResultToken,
-      Passengers: [
-        {
-          IsLeadPax: payload.Passengers?.[0]?.IsLeadPax || "1",
-          Title: payload.Passengers?.[0]?.Title || "Mr",
-          FirstName: payload.Passengers?.[0]?.FirstName || "",
-          LastName: payload.Passengers?.[0]?.LastName || "",
-          Gender: payload.Passengers?.[0]?.Gender || 1,
-          DateOfBirth: payload.Passengers?.[0]?.DateOfBirth || "",
-          PassportNumber: payload.Passengers?.[0]?.PassportNumber || "",
-          CountryCode: payload.Passengers?.[0]?.CountryCode || "IN",
-          CountryName: payload.Passengers?.[0]?.CountryName || "",
-          ContactNo: payload.Passengers?.[0]?.ContactNo || "",
-          City: payload.Passengers?.[0]?.City || "",
-          PinCode: payload.Passengers?.[0]?.PinCode || "",
-          AddressLine1: payload.Passengers?.[0]?.AddressLine1 || "",
-          Email: payload.Passengers?.[0]?.Email || "",
-          PaxType: payload.Passengers?.[0]?.PaxType || 1,
-        }
-      ]
-    };
-    
-
-   const response=await firstValueFrom(
-    
-    this.http.post('http://test.services.travelomatix.com/webservices/index.php/flight/service/CommitBooking',
-    req,
-    {
-      headers:{
-
-        'Content-Type': 'application/json',
-            'x-Username': 'test245274',
-            'x-DomainKey': 'TMX3372451534825527',
-            'x-Password': 'test@245',
-            'x-system': 'test'
-      }
+        return result;
     }
-    )
-
-
-
-   )
-
-   return response.data
-
-  }
-
-
-
-
-
-
-
 }

@@ -1,48 +1,48 @@
-import { Controller, Post, Body } from '@nestjs/common';
+
+import { Controller, Post, Body, Get, Param } from '@nestjs/common';
 import { FlightsService } from './flights.service';
+import { NotFoundException } from '@nestjs/common';
+import { FareQuoteService } from './FareQuote.service';
+import { CommitBooking } from './CommitBooking.service';
 
-
-@Controller('flight')
+@Controller('flights')
 export class FlightsController {
-  constructor(private readonly flightService: FlightsService) {}
+  constructor(
+    private readonly flightsService: FlightsService,
+     private readonly FareQuoteService:FareQuoteService,
+     private readonly CommitBookingService:CommitBooking
+    ) {}
 
   @Post('search')
-async Search(@Body() body: any) {
-  return this.flightService.searchFlights(body);
-}
+  async search(@Body() body: any) {
+    return this.flightsService.searchFlights(body);
+  }
 
-@Post('fare-Rules')
-async fetchFareRules(@Body() body: any) {
-  return this.flightService.fetchFareRules(body);
-}
+  @Get('by-token/:token')
+  async getByToken(@Param('token') token: string) {
+   
+    return this.flightsService.getByToken(token);
+  }
 
-@Post('fare-Quote')
-async fetchFareQuote(@Body() body:any){
-    return this.flightService.FetchFareQuote(body)
-}
-
-@Post('UpdatedFare-Quote')
-async UpdatedFareQuote(@Body() body:any){
-    return this.flightService.UpdatedFareQuoteRound(body)
-}
-
-@Post('ExtraServices')
-async ExtraServices(@Body() body:any){
-    return this.flightService.ExtraService(body)
-}
-
-@Post('CommitBooking')
-async CommitBooking(@Body() body:any){
-    return this.flightService.CommitBooking(body)
-}
+ 
 
 
+  @Post('FareQuote')
+  async FareQuote(@Body() body:any){
+       return this.FareQuoteService.FetchFareQuoteFromApi(body)
+  }
 
+  @Get('by-Search-token/:token')
+  async ByToken(@Param('token') token: string) {
+
+      console.log("token controller called ")
+    return this.FareQuoteService.GetByToken(token)
+  }
+
+  @Post('CommitBooking')
+  async CommitBooking(@Body() body:any){
+     return this.CommitBookingService.CommitBooking(body)
+  }
 
 
 }
-
-
-
-
-
