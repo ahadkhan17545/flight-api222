@@ -1,3 +1,4 @@
+
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { firstValueFrom } from 'rxjs';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -11,11 +12,12 @@ export class FareQuoteService {
     private readonly http: HttpService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
+  
 
-  formatFareQuote(raw: any, resultToken: string) {
+  formatFareQuote(raw: any) {
     const journey = raw?.UpdateFareQuote?.FareQuoteDetails?.JourneyList ?? null;
     const price = journey?.Price ?? null;
-    
+    const redisToken=uuidv4();
 
     return {
       Status: raw?.Status ?? 0,
@@ -50,7 +52,7 @@ export class FareQuoteService {
                   CabinClass: flight?.CabinClass ?? null,
                   Operatedbyairline: flight?.Operatedbyairline ?? null,
                   Operatedbyairlinename: flight?.Operatedbyairlinename ?? null,
-                  Duration: flight?.Duration ?? null,
+                  Duration: flight?.Duration?Number(flight?.Duration): null,
                   Attr: {
                     Baggage: flight?.Attr?.Baggage ?? null,
                     CabinBaggage: flight?.Attr?.CabinBaggage ?? null,
@@ -61,70 +63,97 @@ export class FareQuoteService {
             },
             Price: {
               Currency: price?.Currency ?? null,
-              TotalDisplayFare: price?.TotalDisplayFare ?? null,
+              TotalDisplayFare: price?.TotalDisplayFare?Number(price?.TotalDisplayFare):null,
               PriceBreakup: {
-                BasicFare: price?.PriceBreakup?.BasicFare ?? null,
-                Tax: price?.PriceBreakup?.Tax ?? null,
-                AgentCommission: price?.PriceBreakup?.AgentCommission ?? null,
-                AgentTdsOnCommision: price?.PriceBreakup?.AgentTdsOnCommision ?? null,
+                BasicFare: price?.PriceBreakup?.BasicFare?Number(price?.PriceBreakup?.BasicFare):null,
+                Tax: price?.PriceBreakup?.Tax?Number(price?.PriceBreakup?.Tax):null,
+                AgentCommission: price?.PriceBreakup?.AgentCommission?Number(price?.PriceBreakup?.AgentCommission):null,
+                AgentTdsOnCommision: price?.PriceBreakup?.AgentTdsOnCommision?Number(price?.PriceBreakup?.AgentTdsOnCommision):null,
               },
               PassengerBreakup: price?.PassengerBreakup ?? {},
             },
             ResultToken: journey?.ResultToken ?? null,
             Attr: {
-              IsRefundable: journey?.Attr?.IsRefundable ?? null,
+              IsRefundable: journey?.Attr?.IsRefundable ?? false,
               AirlineRemark: journey?.Attr?.AirlineRemark ?? null,
               FareType: journey?.Attr?.FareType ?? null,
-              IsLCC: journey?.Attr?.IsLCC ?? null,
-              ExtraBaggage: journey?.Attr?.ExtraBaggage ?? null,
-              conditions: journey?.Attr?.conditions ?? null,
+              IsLCC: journey?.Attr?.IsLCC ?? false,
+              ExtraBaggage: journey?.Attr?.ExtraBaggage ?? false,
+              conditions: journey?.Attr?.conditions ?? false,
             },
             HoldTicket: journey?.HoldTicket ?? false,
-            
-            redisToken: resultToken,
+            redisToken: redisToken,
           },
         },
       },
     };
   }
 
+  
+  
+
   async FetchFareQuoteFromApi(resultToken: string) {
-    const apiRes = await firstValueFrom(
-      this.http.post(
-        'http://test.services.travelomatix.com/webservices/index.php/flight/service/UpdateFareQuote',
-     
-         resultToken , 
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-Username': 'test245274',
-            'x-Password': 'test@245',
-            'x-DomainKey': 'TMX3372451534825527',
-            'x-System': 'test',
-          },
-        },
-      ),
-    );
+    const cacheKey=JSON.stringify(resultToken);
 
-    const formatted = this.formatFareQuote(apiRes.data, resultToken);
+    const cacheResponse=await this.cacheManager.get(cacheKey);
 
-    const key = formatted.UpdateFareQuote.FareQuoteDetails.JourneyList.redisToken;
+  if(cacheResponse)
+  {
+    console.log('cache hit ');
+    return cacheResponse
+  }
+  console.log('cache miss , api calling')
     
-    const ttlSeconds = 36000; 
 
-    await this.cacheManager.set(key, formatted, ttlSeconds);
-    console.log("key set", key);
+    try {
+      const apiRes = await firstValueFrom(
+        this.http.post(
+          'http://test.services.travelomatix.com/webservices/index.php/flight/service/UpdateFareQuote',
+          resultToken,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-Username': 'test245274',
+              'x-Password': 'test@245',
+              'x-DomainKey': 'TMX3372451534825527',
+              'x-System': 'test',
+            },
+          },
+        ),
+      );
 
-    return formatted;
+      const formatted = this.formatFareQuote(apiRes.data);
+      const key = formatted.UpdateFareQuote.FareQuoteDetails.JourneyList.redisToken;
+  
+
+      console.log("Attempting to set cache key:", key);
+      await this.cacheManager.set(key, formatted, { ttl: 3600 } as any);
+      console.log("Cache key set successfully:", key);
+
+      return formatted;
+    } 
+    catch (e) {
+      console.error('API call or cache SET failed:', e);
+      throw e;
+    }
   }
 
   async GetByToken(token: string) {
     const cleanToken = token.trim();
-    console.log(cleanToken);
-    const result = await this.cacheManager.get(cleanToken);
-    console.log(result);
-    if (!result) throw new NotFoundException('Results not found for this token');
+    console.log('Looking up token:', cleanToken);
 
-    return result;
+    try {
+      const result = await this.cacheManager.get(cleanToken);
+      console.log('Cache result:', result);
+
+      if (!result) {
+        throw new NotFoundException('Results not found for this token');
+      }
+
+      return result;
+    } catch (e) {
+      console.error('Cache GET failed:', e);
+      throw new NotFoundException('Error retrieving token');
+    }
   }
 }

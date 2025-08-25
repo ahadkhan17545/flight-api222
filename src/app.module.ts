@@ -1,4 +1,3 @@
-// src/flights/flights.module.ts
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { redisStore } from 'cache-manager-redis-store';
@@ -7,6 +6,10 @@ import { FlightsService } from './flights/flights.service';
 import { FlightsController } from './flights/flights.controller';
 import { FareQuoteService } from './flights/FareQuote.service';
 import { CommitBooking } from './flights/CommitBooking.service';
+import { Reservation } from './flights/Reservation.service.';
+import { FlightsApiController } from './flights-api/flights-api.controller';
+import { FlightsApiModule } from './flights-api/flights-api.module';
+import { FlightsApiService } from './flights-api/flight-services';
 
 @Module({
   imports: [
@@ -15,17 +18,21 @@ import { CommitBooking } from './flights/CommitBooking.service';
       useFactory: async () => ({
         store: await redisStore({
           socket: {
-            host: 'localhost', // your redis host
-            port: 6379,        // your redis port
+            host: 'localhost', 
+            port: 6379,        
           },
           ttl: 3600, 
         }),
       }),
       isGlobal: true,
     }),
+    FlightsApiModule,
+    
       
   ],
-  controllers: [FlightsController],
-  providers: [FlightsService,FareQuoteService,CommitBooking],
+
+  
+  controllers: [FlightsController, FlightsApiController],
+  providers: [FlightsService,FareQuoteService,CommitBooking,Reservation,FlightsApiService],
 })
 export class AppModule {}
