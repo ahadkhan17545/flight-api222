@@ -1,48 +1,35 @@
-import { Controller, Param } from '@nestjs/common';
-import { Post,Body,Get } from '@nestjs/common';
-import { FlightSearchDto } from './Dtos/flight-Search.dto' 
-import { FlightsApiService } from './flight-services';
-import {BookingDto } from './Dtos/Booking.dto';
+import { Controller, Get, Query, Body, Post } from '@nestjs/common';
+import { FlightsService } from './flight-services';
 
+@Controller('flights-apis')
+export class FlightsController {
+  constructor(private readonly flightsService: FlightsService) {}
 
-@Controller('flights-api')
-export class FlightsApiController {
-
-  constructor(
-    private readonly flightApi:FlightsApiService
-  ){}
-
-
-    @Post('search')
-  async search(@Body() body:FlightSearchDto) {
-    return this.flightApi.searchFlights(body)
+  
+  @Post('search')
+  async searchFlights( @Query('source') source: string, @Body() searchParams: any) {
+    return this.flightsService.searchFlights(source, searchParams);
   }
-
 
   @Post('FareQuote')
-  async FareQuote(@Body() body:any){
-    return this.flightApi.FetchFareQuote(body)
+  async FareQuote(@Query('source') source:string,@Body() searchParams:any){
+    return this.flightsService.Farequote(source,searchParams)
   }
 
-@Post('CommitBooking')
-async CommitBooking(@Body() body:BookingDto){
-  return this.flightApi.CommitBooking(body)
-}
+  @Post('CommitBooking')
+  async CommitBooking(@Query('source') source:string,@Body() searchParams:any){
+    return this.flightsService.CommitBooking(source,searchParams)
+  }
+
+  @Post('HoldTicket')
+  async HoldTicket(@Query('source') source:string,@Body() searchParams:any){
+    return this.flightsService.HoldTicket(source,searchParams)
+  }
 
 
-@Post('AppReference')
-async AppReference(){
-  return this.flightApi.GenerateAppRefernce();
-}
 
-@Get('GetByToken/:token')
-async GetByToken(@Param('token') token:string){
-  return this.flightApi.getByToken(token);
-}
 
-@Post('HoldTicket')
-async HoldTicket(@Body() body:BookingDto){
-  return this.flightApi.HoldTicket(body);
-}
+
+
 
 }
