@@ -26,7 +26,3 @@ jobs:
       run: |
         npm install 
         npx webpack
-		    npm run start 
-				npm run start:dev
-				npm run start:prod
-        
